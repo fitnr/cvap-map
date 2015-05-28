@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>USA Voting Population</title>
+    <link rel="stylesheet" type="text/css" href="assets/style.css">
+</head>
+<body>
+
+<script type="text/javascript" src="assets/d3.min.js"></script>
+<script type="text/javascript">
+
+var width = 1600,
+    height = 700,
+    margin = {left: 10, right: 10, top: 10, bottom: 10};
+
+var CVAP = d3.map();
+
+var svg = d3.select('body').append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+var projection = d3.geo.albersUsa()
+    .scale(1450)
+    .translate([width / 2.5, height / 2]);
+
+var R = d3.scale.sqrt()
+    .range([1, 50]);
+
+var path = d3.geo.path()
+    .projection(projection);
+
+queue()
+    .defer(d3.json, "data/county.json")
+    .defer(d3.csv, "data/cvap-county.csv", function(d) {
+        CVAP.set(d.GEOID, {total: +d.TOT_EST, voting: +d.CVAP_EST});
+    })
+    .await(ready);
+
+function ready(err, usa, cvap) {
+
+    var centroids = topojson.feature(usa, usa.objects.tl_2013_us_county)
+        .features.map(function(feature) {
+            var properties = CVAP.get(feature.properties.id);
+            try {
+                return {
+                    nonvoting: properties.total - properties.voting,
+                    name: feature.properties.n,
+                    centroid: path.centroid(feature),
+                };
+            } catch(_) {
+                // pass
+            }
+        })
+        .filter(function(d){ return typeof d !== 'undefined' && typeof d.centroid[0] !== 'undefined'; });
+
+    var nums = centroids.map(function(d){ return d.nonvoting; });
+
+    var max = Math.max.apply(null, nums);
+    var min = Math.min.apply(null, nums);
+
+    R.domain([min, max]);
+
+    svg.append("g")
+        .attr("class", "counties")
+        .datum(topojson.mesh(usa, usa.objects.tl_2013_us_county))
+        .append("path")
+        .attr("d", path);
+
+    svg.append('g')
+        .classed('bubbles', 1)
+        .selectAll('circle')
+        .data(centroids).enter()
+        .append('circle')
+        .attr('r', function(d){ return R(d.nonvoting); })
+        .attr('cx', function(d){ return d.centroid[0] || -100 ; })
+        .attr('cy', function(d){ return d.centroid[1] || -100 ; })
+        .append('title')
+        .text(function(d){ return d.name; })
+}
+
+</script>
+
+</body>
+</html>

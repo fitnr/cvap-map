@@ -9,7 +9,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "d3": "^3.5.5"
+    "d3": "^3.5.5",
+    "queue-async": "^1.0.7",
+    "topojson": "^1.6.19"
   },
   "devDependencies": {
     "smash": "0.0.14",
