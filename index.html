@@ -5,17 +5,31 @@
     <link rel="stylesheet" type="text/css" href="assets/style.css">
 </head>
 <body>
+<h1>Inegibility to Vote</h1>
+<div class="wrap">
+    <div class="column">
+        <p>The Supreme Court will be <a href="http://www.nytimes.com/2015/05/27/us/supreme-court-to-weigh-meaning-of-one-person-one-vote.html">considering a case</a> that could up-end the meaning of "one man, one vote." This legal doctrine holds that legislative districts must be roughly equal in population. Since "one man, one vote" was put in place in the sixties, state legislative districts must have roughly equal poplations. Every ten years, states redraw their districts using <a href="https://www.census.gov/history/www/programs/demographic/decennial_census.html">US Census</a> counts of population. The Census tries to count everyone, no matter their age or citizenship status.</p>
 
+        <p>The plaintiffs in <em><a href="http://www.scotusblog.com/2015/05/major-test-on-voter-equality-set-for-review/">Evenwel v. Abbott</a></em> live in rural areas of Texas and believe that they're being treated unfairly because urban districts have fewer registered voters. 
+        (The two east Texas counties the plaintiffs live in are highlighted in black on the map.) They say that "one man, one vote" should be "one voter, one vote", and districts should be drawn with equal numbers of registered voters. The lawsuit is supported by conservative legal foundation that believe white people are the main victims of racial discrimination, and previously litigated the case that gutted the Voting Rights Act.</p>
+
+        <p>Who would this effect? There are three main groups of people who aren't eligible to vote: children, non-citizens, and disenfranchised felons*. The Census does a <a href="https://www.census.gov/rdo/data/voting_age_population_by_citizenship_and_race_cvap.html">survey of voting age and citizenship</a>, this map uses 2013 estimates. (One could also use lists of registered voters, but those aren't compiled, and often include dead people or people who have moved away. Why does voting even require registration, anyway? North Dakota doesn't have it, several states let you register on Election Day.)</p>
+
+        <p><small>* Unfortunately, there isn't good data on felon disenfranchisement below the state level. About <a href="http://sentencingproject.org/doc/publications/fd_State_Level_Estimates_of_Felon_Disen_2010.pdf">2.5% of the population is disenfranchised</a>, with rates varying from 10% (Florida) to 0% in states without disenfranchisement laws (Maine, Utah, Vermont).</small></p>
+    </div>
+</div>
 <script type="text/javascript" src="assets/d3.min.js"></script>
 <script type="text/javascript">
 
-var width = 1600,
+var width = 1400,
     height = 700,
-    margin = {left: 10, right: 10, top: 10, bottom: 10};
+    margin = {left: 10, right: 10, top: 10, bottom: 50};
 
-var CVAP = d3.map();
+var comma = d3.format(',g');
 
-var svg = d3.select('body').append('svg')
+var percent = d3.format('.1%');
+
+var svg = d3.select('.wrap').append('svg')
     .attr('width', width + margin.left + margin.right)
     .attr('height', height + margin.top + margin.bottom)
     .append('g')
@@ -25,47 +39,59 @@ var projection = d3.geo.albersUsa()
     .scale(1450)
     .translate([width / 2.5, height / 2]);
 
-var R = d3.scale.sqrt()
-    .range([1, 50]);
+var sqrt = d3.scale.sqrt()
+    .range([0.5, 40]);
+
+var threshold = d3.scale.threshold()
+    .domain([0.2, 0.25, 0.275, 0.3, 0.4, 0.55])
+    .range(d3.range(6).map(function(d){ return 'q' + d + '-6'; }));
 
 var path = d3.geo.path()
     .projection(projection);
 
-queue()
-    .defer(d3.json, "data/county.json")
-    .defer(d3.csv, "data/cvap-county.csv", function(d) {
-        CVAP.set(d.GEOID, {total: +d.TOT_EST, voting: +d.CVAP_EST});
-    })
-    .await(ready);
+function unequal(a, b) { return a !== b; }
 
-function ready(err, usa, cvap) {
+d3.json("data/us-cvap.json", function (err, usa) {
 
-    var centroids = topojson.feature(usa, usa.objects.tl_2013_us_county)
-        .features.map(function(feature) {
-            var properties = CVAP.get(feature.properties.id);
+    var centroids = topojson.feature(usa, usa.objects.counties)
+        .features.map(function(d) {
             try {
-                return {
-                    nonvoting: properties.total - properties.voting,
-                    name: feature.properties.n,
-                    centroid: path.centroid(feature),
-                };
+                d.properties.centroid = path.centroid(d);
+                d.properties.percent = (d.properties.total - d.properties.voters) / d.properties.total;
+                d.properties.count = d.properties.total - d.properties.voters;
+                return d;
             } catch(_) {
                 // pass
             }
         })
-        .filter(function(d){ return typeof d !== 'undefined' && typeof d.centroid[0] !== 'undefined'; });
+        .filter(function(d){ return typeof d !== 'undefined' && typeof d.properties.centroid[0] !== 'undefined'; });
 
-    var nums = centroids.map(function(d){ return d.nonvoting; });
-
+    var nums = centroids.map(function(d){ return d.properties.count; });
+    
     var max = Math.max.apply(null, nums);
-    var min = Math.min.apply(null, nums);
-
-    R.domain([min, max]);
+    sqrt.domain([Math.min.apply(null, nums), max]);
 
     svg.append("g")
-        .attr("class", "counties")
-        .datum(topojson.mesh(usa, usa.objects.tl_2013_us_county))
+        .classed("counties", 1)
+        .selectAll("path")
+        .data(centroids).enter()
         .append("path")
+        .attr("d", path)
+        .attr('class', function(d){ return threshold(d.properties.percent); })
+        .classed({suit: function(d){ return d.properties.id === '48449' || d.properties.id === '48339'; }})
+        .append('title')
+        .text(function(d){ return d.properties.n; });
+
+    svg.append("g")
+        .classed("borders county", 1)
+        .datum(topojson.mesh(usa, usa.objects.counties, unequal))
+        .append('path')
+        .attr("d", path);
+
+    svg.append("g")
+        .classed('borders state', 1)
+        .datum(topojson.mesh(usa, usa.objects.states, unequal))
+        .append("path")        
         .attr("d", path);
 
     svg.append('g')
@@ -73,14 +99,58 @@ function ready(err, usa, cvap) {
         .selectAll('circle')
         .data(centroids).enter()
         .append('circle')
-        .attr('r', function(d){ return R(d.nonvoting); })
-        .attr('cx', function(d){ return d.centroid[0] || -100 ; })
-        .attr('cy', function(d){ return d.centroid[1] || -100 ; })
-        .append('title')
-        .text(function(d){ return d.name; })
-}
+        .attr('r', function(d){ return sqrt(d.properties.count); })
+        .attr('cx', function(d){ return d.properties.centroid[0] || -100 ; })
+        .attr('cy', function(d){ return d.properties.centroid[1] || -100 ; });
 
+    var legend = svg.append('g')
+        .attr('transform', 'translate(100,' + height + ')')
+        .attr('class', 'legend');
+
+    legend.append('text')
+        .text('non-voting-eligible population')
+        .attr('y', -5);
+
+    legend.append('text')
+        .attr('y', -5)
+        .attr('x', 200 - 24)
+        .text('non-voting-eligible percent of the total population');
+
+    var bubbles = legend.append('g')
+        .attr('transform', 'translate(0,15)')
+        .selectAll('g')
+        .data([10000, 100000, 1000000]).enter()
+        .append('g')
+        .attr('transform', function(d, i){ return 'translate(' + (i * 50) + ')' ; });
+
+    bubbles.append('circle')
+        .attr('r', function(d) { return sqrt(d); })
+        .attr('cx', 5)
+        .attr('cy', 10);
+
+    bubbles.append('text')
+        .text(function(d){ return comma(d); });
+
+    var domain = threshold.domain();
+
+    var swatches = legend.append('g')
+        .attr('transform', 'translate(0,15)')
+        .attr('class', 'swatches')
+        .selectAll('g')
+        .data([0].concat(domain.slice(0, 5))).enter()
+        .append('g')
+        .attr('transform', function(d, i) { return 'translate(' + (200 + (i * 90)) + ')'; })
+
+    swatches.append('rect')
+        .attr('height', 10)
+        .attr('width', 20)
+        .attr('x', -24)
+        .attr('class', function(d){ return threshold(d); });
+
+    swatches.append('text')
+        .attr('y', 8)
+        .text(function(d, i){ return percent(d).replace('%','') + ' - ' + percent(domain[i]);  })
+});
 </script>
-
 </body>
 </html>
