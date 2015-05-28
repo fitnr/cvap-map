@@ -1,6 +1,6 @@
 node_modules
 data
 geo
-assets
+assets/d3.min.js
 CVAP_CSV_Format_2009-2013
 CVAP_CSV_Format_2009-2013.zip
